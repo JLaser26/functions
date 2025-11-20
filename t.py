@@ -42,7 +42,16 @@ class function:
     def integral(self):
         ...
 
+    def __add__(self, other):
+        return function(" ".join(self.vars) + " + " + " ".join(other.vars))
+    
+    def __sub__(self, other):
+        return function(" ".join(self.vars) + " - " + " ".join(other.vars))
+
 #testing
 y = function("x", "- 2w", "+ 3z")
+q = function("x", "- 2w", "+ 3z")
 print(y, y.number_of_variables())
 print(y.evaluater())
+print(y+q)
+print(y-q)
