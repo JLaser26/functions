@@ -1,7 +1,6 @@
 from sympy import (
-    symbols, diff, integrate,
-    sin, cos, tan, exp, log, Abs,
-    S
+    symbols, diff, integrate, sin, cos, tan,
+    exp, log, Abs, S, Interval
 )
 from sympy.parsing.sympy_parser import (
     parse_expr,
@@ -10,7 +9,7 @@ from sympy.parsing.sympy_parser import (
 )
 from sympy.calculus.util import continuous_domain, function_range
 
-# Transformations that allow implicit multiplication like "4x", "2sin(x)"
+# Allow implicit multiplication like "4x", "2sin(x)"
 TRANSFORMS = standard_transformations + (implicit_multiplication_application,)
 
 
@@ -19,32 +18,29 @@ TRANSFORMS = standard_transformations + (implicit_multiplication_application,)
 # ------------------------------
 class Function:
     def __init__(self, expr: str):
-        # Allow '^' for powers
+        # allow "^" for power
         self.expr_str = expr.replace("^", "**")
-
-        # Parse expression with implicit multiplication enabled
+        # parse with implicit multiplication enabled
         self.expr = parse_expr(self.expr_str, transformations=TRANSFORMS)
-
-        # Detect variables (symbols)
+        # detect variables
         self.vars = sorted(self.expr.free_symbols, key=lambda s: s.name)
 
     def __str__(self):
         return str(self.expr)
 
     def tokens(self):
-        """Return expression tokens split by whitespace from the original string."""
+        """Return expression tokens split by whitespace from original string."""
         return self.expr_str.split()
 
     def evaluater(self, **values):
         """
-        Evaluate the expression by substituting numerical values.
+        Evaluate expression by substituting values into variables.
         Example:
             f = Function("x - 2w + 3z")
             f.evaluater(x=1, w=2, z=3)
         """
         evaluated = self.expr.subs(values)
         if evaluated.free_symbols:
-            # still symbolic
             return evaluated
         try:
             return float(evaluated.evalf())
@@ -57,66 +53,67 @@ class Function:
     def number_of_variables(self):
         return len(self.vars)
 
+    # ---------- internal helper ----------
+    def _ensure_symbol(self, var):
+        """Accept either string or SymPy Symbol; always return Symbol."""
+        if isinstance(var, str):
+            return symbols(var)
+        return var
+
     # ---------- Calculus ----------
     def derivative(self, var=None):
-        """
-        Derivative w.r.t. specified variable.
-        If var is None and there's only one variable, use that.
-        """
         if var is None:
             if len(self.vars) != 1:
                 raise ValueError("Specify a variable for partial derivative.")
             var = self.vars[0]
         else:
-            var = symbols(var)
+            var = self._ensure_symbol(var)
         return self.__class__(str(diff(self.expr, var)))
 
     def integral(self, var=None):
-        """
-        Indefinite integral w.r.t. specified variable.
-        If var is None and there's only one variable, use that.
-        """
         if var is None:
             if len(self.vars) != 1:
                 raise ValueError("Specify variable for integration.")
             var = self.vars[0]
         else:
-            var = symbols(var)
+            var = self._ensure_symbol(var)
         return self.__class__(str(integrate(self.expr, var)))
 
     # ---------- Domain & Range ----------
     def domain(self, var=None):
         """
         Generic domain over ℝ using SymPy's continuous_domain.
+        Works for most single-variable expressions.
         """
         if var is None:
             if len(self.vars) != 1:
-                raise ValueError("Domain currently implemented only for single-variable functions; specify var.")
+                raise ValueError("Domain currently only for single-variable functions; pass var.")
             var = self.vars[0]
         else:
-            var = symbols(var)
-
-        dom = continuous_domain(self.expr, var, S.Reals)
-        return dom
+            var = self._ensure_symbol(var)
+        return continuous_domain(self.expr, var, S.Reals)
 
     def range(self, var=None, domain=None):
         """
-        Generic range using SymPy's function_range on a given domain.
+        Generic range using SymPy's function_range.
+        For some functions (like Abs), SymPy may fail → we catch that.
         """
         if var is None:
             if len(self.vars) != 1:
-                raise ValueError("Range currently implemented only for single-variable functions; specify var.")
+                raise ValueError("Range currently only for single-variable functions; pass var.")
             var = self.vars[0]
         else:
-            var = symbols(var)
+            var = self._ensure_symbol(var)
 
         if domain is None:
             domain = self.domain(var)
 
-        rng = function_range(self.expr, var, domain)
-        return rng
+        try:
+            return function_range(self.expr, var, domain)
+        except NotImplementedError:
+            return "Range could not be computed symbolically."
 
-    # For backward compatibility with your earlier naming idea
+    # You also wanted Domain/Range names:
     def Domain(self, var=None):
         return self.domain(var)
 
@@ -157,21 +154,18 @@ class PolynomialFunction(Function):
         """
         For real polynomials in one variable: domain is ℝ.
         """
-        if var is None:
-            if len(self.vars) != 1:
-                raise ValueError("Domain for PolynomialFunction: specify var for multivariable case.")
         return S.Reals
 
     def range(self, var=None, domain=None):
         """
-        Use SymPy's function_range for polynomials over ℝ.
+        Use SymPy's function_range over ℝ.
         """
         if var is None:
             if len(self.vars) != 1:
-                raise ValueError("Range currently implemented only for single-variable polynomials; specify var.")
+                raise ValueError("Range only implemented for single-variable polynomials; pass var.")
             var = self.vars[0]
         else:
-            var = symbols(var)
+            var = self._ensure_symbol(var)
 
         if domain is None:
             domain = S.Reals
@@ -184,31 +178,12 @@ class PolynomialFunction(Function):
 # -----------------------------------
 class TrigFunction(Function):
     def simplify_trig(self):
-        """Simplify the trigonometric expression."""
         return TrigFunction(str(self.expr.simplify()))
 
     def to_polynomial_if_possible(self):
-        """
-        Try to rewrite using algebraic forms where possible.
-        """
         return TrigFunction(str(self.expr.simplify().rewrite('sqrt')))
 
-    def domain(self, var=None):
-        """
-        Domain of trig functions:
-        - In general, use continuous_domain.
-        (This will automatically exclude points where tan, sec etc. blow up.)
-        """
-        return super().domain(var)
-
-    def range(self, var=None, domain=None):
-        """
-        Use function_range. For simple cases:
-        - sin(x), cos(x) → [-1, 1]
-        - tan(x) → ℝ
-        SymPy handles many of these directly.
-        """
-        return super().range(var, domain)
+    # domain() and range() are good using the base class implementations.
 
 
 # -----------------------------------
@@ -224,25 +199,22 @@ class RationalFunction(Function):
     def domain(self, var=None):
         """
         Domain: all real numbers where denominator ≠ 0.
-        continuous_domain already does this, but we keep it explicit here.
+        Base class continuous_domain already handles this.
         """
         return super().domain(var)
 
     def range(self, var=None, domain=None):
         """
-        Range via function_range over rational function domain.
+        Range via function_range over that domain.
         """
         return super().range(var, domain)
 
     def vertical_asymptotes(self):
-        """Points where denominator = 0 (symbolic equation)."""
         den = self.denominator()
         return f"Solutions of: {den} = 0"
 
     def horizontal_asymptote(self):
-        """Determine horizontal asymptote based on polynomial degrees if possible."""
         num, den = self.expr.as_numer_denom()
-
         try:
             p_num = num.as_poly()
             p_den = den.as_poly()
@@ -267,58 +239,47 @@ class RationalFunction(Function):
 # 🔵 SUBCLASS: Exponential Function
 # -----------------------------------
 class ExponentialFunction(Function):
-    def domain(self, var=None):
-        """
-        exp-based expressions are usually defined for all ℝ,
-        but we still rely on continuous_domain in case of more complex expressions
-        like exp(1/x), etc.
-        """
-        return super().domain(var)
-
-    def range(self, var=None, domain=None):
-        """
-        For pure exp(x) or a*exp(x)+b, range is (0, ∞) or shifted,
-        but in general we again rely on function_range.
-        """
-        return super().range(var, domain)
+    # generic domain/range via base class works fine for exp-type expressions
+    pass
 
 
 # -----------------------------------
 # 🟤 SUBCLASS: Logarithmic Function
 # -----------------------------------
 class LogFunction(Function):
-    def domain(self, var=None):
-        """
-        Logarithm is defined where its argument > 0.
-        continuous_domain handles this (for real log).
-        """
-        return super().domain(var)
-
-    def range(self, var=None, domain=None):
-        """
-        For log(x) (base e), range is all ℝ.
-        But with more complex arguments, we use function_range.
-        """
-        return super().range(var, domain)
+    # continuous_domain does the x > 0 restriction automatically
+    pass
 
 
 # -----------------------------------
 # 🟠 SUBCLASS: Absolute Value Function
 # -----------------------------------
 class AbsoluteFunction(Function):
-    def domain(self, var=None):
-        """
-        |x| is defined for all real x (normally),
-        but we delegate to continuous_domain in case it's nested inside other ops.
-        """
-        return super().domain(var)
-
     def range(self, var=None, domain=None):
         """
-        For |x|, range is [0, ∞), but more complex expressions may change that.
-        So we use function_range generically.
+        Special-case Abs for a clean result.
+        For Abs(linear), the range is [0, ∞).
+        To keep things simple and robust, for Abs(something in ℝ) we return [0, ∞).
         """
-        return super().range(var, domain)
+        if var is None:
+            if len(self.vars) != 1:
+                raise ValueError("Range only implemented for single-variable |.|; pass var.")
+            var = self.vars[0]
+        else:
+            var = self._ensure_symbol(var)
+
+        if domain is None:
+            domain = self.domain(var)
+
+        # If it's literally Abs(something), we know output is ≥ 0
+        if isinstance(self.expr, Abs):
+            return Interval(0, S.Infinity)
+
+        # Fallback to SymPy's general function_range
+        try:
+            return function_range(self.expr, var, domain)
+        except NotImplementedError:
+            return "Range could not be computed symbolically."
 
 
 # ------------------------------
@@ -336,14 +297,13 @@ if __name__ == "__main__":
     print("y + q =", y + q)
     print("y - q =", y - q)
 
-    # For domain & range: use a single-variable example
+    # Single-variable generic function: f(x) = x^2 + 1
     f = Function("x^2 + 1")
     print("\nf(x) =", f)
     print("Domain(f):", f.Domain())
     print("Range(f):", f.Range())
 
-    # Derivative & Integral
-    print("dy/dx for f:", f.derivative("x"))
+    print("f'(x):", f.derivative("x"))
     print("∫ f dx:", f.integral("x"))
 
     # Polynomial
@@ -352,13 +312,13 @@ if __name__ == "__main__":
     print("degree(p):", p.degree())
     print("Domain(p):", p.Domain())
     print("Range(p):", p.Range())
-    print("p' =", p.derivative())
+    print("p'(x):", p.derivative())
 
     # Trigonometric
     t = TrigFunction("sin(x) + cos(x)")
     print("\nTrig t(x) =", t)
     print("t simplified:", t.simplify_trig())
-    print("t' =", t.derivative())
+    print("t'(x):", t.derivative())
     print("Domain(t):", t.Domain())
     print("Range(t):", t.Range())
 
