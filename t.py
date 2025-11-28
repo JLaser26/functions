@@ -244,3 +244,6 @@ if __name__ == "__main__":
     l = LogFunction("log(x)")
     l.plot(interval=(0.1, 10))   # safe interval for log
 
+    k = PolynomialFunction("x^5 - 2x^4 + 3x^3 - 4x^2 + 5x + 6")
+    k.plot(interval=(-100, 100))
+
