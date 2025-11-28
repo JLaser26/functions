@@ -226,26 +226,26 @@ class AbsoluteFunction(Function):
 # TESTING PLOT FEATURE
 # ------------------------------
 if __name__ == "__main__":
-    # f = PolynomialFunction("x^3 - 4x + 1")
-    # f.plot()      # automatically plots on [-10, 10]
+    f = PolynomialFunction("x^3 - 4x + 1")
+    f.plot()      # automatically plots on [-10, 10]
 
-    # g = TrigFunction("sin(x) + cos(x)")
-    # g.plot()      # automatically plots on [-2π, 2π]
+    g = TrigFunction("sin(x) + cos(x)")
+    g.plot()      # automatically plots on [-2π, 2π]
 
-    # r = RationalFunction("(x^2 + 1)/(x - 2)")
-    # r.plot()      # automatically avoids asymptote reasonably
+    r = RationalFunction("(x^2 + 1)/(x - 2)")
+    r.plot()      # automatically avoids asymptote reasonably
 
-    # h = AbsoluteFunction("Abs(x - 1)")
-    # h.plot()
+    h = AbsoluteFunction("Abs(x - 1)")
+    h.plot()
 
-    # e = ExponentialFunction("exp(x)")
-    # e.plot()
+    e = ExponentialFunction("exp(x)")
+    e.plot()
 
-    # l = LogFunction("log(x)")
-    # l.plot(interval=(0.1, 10))   # safe interval for log
+    l = LogFunction("log(x)")
+    l.plot(interval=(0.1, 10))   # safe interval for log
 
-    # k = PolynomialFunction("x^5 - 2x^4 + 3x^3 - 4x^2 + 5x + 6")
-    # k.plot(interval=(-100, 100))
+    k = PolynomialFunction("x^5 - 2x^4 + 3x^3 - 4x^2 + 5x + 6")
+    k.plot(interval=(-100, 100))
 
     jj = TrigFunction("(sin(x-x^2))/cos(1/x)")
     jj.plot()
